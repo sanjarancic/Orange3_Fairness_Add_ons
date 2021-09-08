@@ -1,40 +1,14 @@
 import pandas as pd
 import numpy as np
 
-from AnyQt.QtWidgets import QLabel, QTableWidget
 from Orange.widgets import gui, settings
 from Orange.widgets.widget import OWWidget, Input
 from Orange.data.table import Table
-from Orange.data.pandas_compat import table_from_frame, table_to_frame
-from PyQt5 import QtCore, QtGui, QtWidgets
+from Orange.data.pandas_compat import table_to_frame
+from PyQt5 import  QtWidgets
 from PyQt5.QtCore import Qt
 
-
-class TableModel(QtCore.QAbstractTableModel):
-
-    def __init__(self, data):
-        super(TableModel, self).__init__()
-        self._data = data
-
-    def data(self, index, role):
-        if role == Qt.DisplayRole:
-            value = self._data.iloc[index.row(), index.column()]
-            return str(value)
-
-    def rowCount(self, index):
-        return self._data.shape[0]
-
-    def columnCount(self, index):
-        return self._data.shape[1]
-
-    def headerData(self, section, orientation, role):
-        # section is the index of the column/row.
-        if role == Qt.DisplayRole:
-            if orientation == Qt.Horizontal:
-                return str(self._data.columns[section])
-
-            if orientation == Qt.Vertical:
-                return str(self._data.index[section])
+from fairness.widgets.table_model import TableModel
 
 
 class MeasureFairness(OWWidget):
@@ -83,7 +57,7 @@ class MeasureFairness(OWWidget):
 
     @Inputs.X
     def set_X(self, X):
-        """Set the input y."""
+        """Set the input X."""
         self.X = X
         self.set_data()
 
@@ -106,7 +80,6 @@ class MeasureFairness(OWWidget):
         self.set_data()
 
     def set_data(self):
-        """Reimplemeted from OWWidget."""
         if self.s is not None and self.y is not None and self.y_pred is not None and self.X is not None:
             n = self.NNeighbors[self.n_neighbors]
             self.DI = self.calculate_disparate_impact(self.s, self.y)
@@ -186,4 +159,3 @@ class MeasureFairness(OWWidget):
         consistency = 1 - sum / len(y_hat)
 
         return consistency
-
