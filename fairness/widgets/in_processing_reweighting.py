@@ -53,6 +53,7 @@ class FairReweighting(OWWidget):
 
     class Outputs:
         coefficients = Output("Coefficients", Table)
+        algorithm = Output('Algorithm', str)
 
     def set_columns(self):
         if self.target is not None and self.sensitive is not None:
@@ -97,5 +98,6 @@ class FairReweighting(OWWidget):
 
         model_lg = LogisticRegression()
         model_lg.fit(X_train, y_train, sample_weight=new_weights)
-        y_pred_proba = table_from_frame(pd.DataFrame({'Coefficients': model_lg.predict_proba(X_train)[:,1]}))
-        self.Outputs.coefficients.send(y_pred_proba)
+        # y_pred_proba = table_from_frame(pd.DataFrame({'Coefficients': model_lg.predict_proba(X_train)[:,1]}))
+        self.Outputs.coefficients.send(model_lg.coef_)
+        self.Outputs.algorithm.send('Reweighting')

@@ -98,6 +98,7 @@ class FairLogisticRegression(OWWidget):
 
     class Outputs:
         coefficients = Output("Coefficients", Table, explicit=True)
+        algorithm = Output('Algorithm', str)
 
     def sigmoid(self, w, X):
         return 1 / (1 + np.exp(-np.sum(w * X, axis=1)))
@@ -160,3 +161,4 @@ class FairLogisticRegression(OWWidget):
 
             coef = table_from_frame(pd.DataFrame({'Coefficients': model.x}))
             self.Outputs.coefficients.send(coef)
+            self.Outputs.algorithm.send('LogisticRegression')

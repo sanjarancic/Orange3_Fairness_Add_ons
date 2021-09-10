@@ -5,7 +5,7 @@ from Orange.widgets import gui, settings
 from Orange.widgets.widget import OWWidget, Input
 from Orange.data.table import Table
 from Orange.data.pandas_compat import table_to_frame
-from PyQt5 import  QtWidgets
+from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
 
 from fairness.widgets.table_model import TableModel

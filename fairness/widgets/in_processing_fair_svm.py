@@ -1,4 +1,5 @@
 from Orange.classification import LogisticRegressionLearner
+from Orange.data import table_to_frame
 from Orange.widgets.widget import OWWidget, Input, Output
 from Orange.data.table import Table
 import numpy as np
@@ -10,11 +11,11 @@ from Orange.widgets import gui, settings
 from fairness.widgets.table_model import TableModel
 
 
-class FairLogisticRegression(OWWidget):
+class FairSVM(OWWidget):
     name = "Fair SVM"
     icon = "icons/fair_svm_icon.png"
 
-    T = [-0.5, 0, 0.5]
+    Thresholds = [-0.5, 0, 0.5]
     t = settings.Setting(1)
 
     want_main_area = False
@@ -31,8 +32,8 @@ class FairLogisticRegression(OWWidget):
 
         gui.comboBox(
             self.box, self, "t",
-            items=[str(x) for x in self.T],
-            orientation=Qt.Horizontal, callback=self.set_data)
+            items=[str(x) for x in self.Thresholds],
+            orientation=Qt.Horizontal, callback=self.zafar_svm)
 
     class Inputs:
         s = Input("Sensitive attribute", Table)
@@ -43,86 +44,65 @@ class FairLogisticRegression(OWWidget):
     def set_X(self, X):
         """Set the input X."""
         self.X = X
-        self.set_data()
+        self.zafar_svm()
 
     @Inputs.s
     def set_s(self, s):
         """Set the input s."""
         self.s = s
-        self.set_data()
+        self.zafar_svm()
 
     @Inputs.y
     def set_y(self, y):
         """Set the input y."""
         self.y = y
-        self.set_data()
+        self.zafar_svm()
 
     class Outputs:
-        sample = Output("Sampled Data", Table)
+        coefficients = Output("Coefficients", Table, explicit=True)
+        algorithm = Output('Algorithm', str)
 
-    def set_data(self):
-        if self.s is not None and self.y is not None and self.y_pred is not None and self.X is not None:
-            t = self.T[self.t]
-            self.DI = self.calculate_disparate_impact(self.s, self.y)
+    def zafar_svm(self):
+        def hinge_loss(w, X, y):
+            yz = y * np.dot(X, w)
+            yz = np.maximum(np.zeros_like(yz), (1 - yz))  # hinge function
 
-            data = pd.DataFrame([
-                [self.C, self.DI, self.EOO, self.PE, self.PP],
-            ], columns=['Consistency', 'Disparate Impact', 'Equality Of Opportunity', 'Predictive Equality',
-                        'Predictive Parity'])
+            return sum(yz)
 
-            model = TableModel(data)
-            self.table.setModel(model)
-        else:
-            pass
-
-    def sigmoid(self, w, X):
-        return 1 / (1 + np.exp(-np.sum(w * X, axis=1)))
-
-    def zafar(self, X, y, s, t=0, alpha=1.0, penalty='l2'):
-        # https://www.jmlr.org/papers/volume20/18-262/18-262.pdf
-        # Zafar, M. B., Valera, I., Gomez-Rodriguez, M., & Gummadi, K. P. (2019).
-        # Fairness Constraints: A Flexible Approach for Fair Classification. J. Mach. Learn. Res., 20(75), 1-42.
-
-        def logistic_loss(w, X, y):
-            y_hat = self.sigmoid(w, X)
-
-            return (-np.mean(y * np.log(y_hat) + (1 - y) * np.log(1 - y_hat)))
-
-        # Ridge
-        def logistic_loss_ridge(w, X, y):
-            y_hat = self.sigmoid(w, X)
-
-            return -np.mean(y * np.log(y_hat) + (1 - y) * np.log(1 - y_hat) + alpha * np.sum(w ** 2))
-
-        # Lasso
-        def logistic_loss_lasso(w, X, y):
-            y_hat = self.sigmoid(w, X)
-
-            return -np.mean(y * np.log(y_hat) + (1 - y) * np.log(1 - y_hat) + alpha * np.sum(np.abs(w)))
-
-        def avg_disp_imp_upper(w, s, X, t):
-            y_intensity = t - np.mean((s - np.mean(s)) * np.sum(w * X, axis=1))
+        def avg_disp_imp_upper(w, X_0, X_1, y_0, y_1, z_1, z_0, t):
+            y_intensity = t + z_1 / z * hinge_loss(w, X_1, y_1) - z_0 / z * hinge_loss(w, X_0, y_0)
 
             return y_intensity
 
-        def avg_disp_imp_lower(w, s, X, t):
-            y_intensity = np.mean((s - np.mean(s)) * np.sum(w * X, axis=1)) + t
+        def avg_disp_imp_lower(w, X_0, X_1, y_0, y_1, z_1, z_0, t):
+            y_intensity = -z_1 / z * hinge_loss(w, X_1, y_1) + z_0 / z * hinge_loss(w, X_0, y_0) + t
 
             return y_intensity
+        if self.s is not None and self.y is not None and self.X is not None:
 
-        w_0 = np.repeat(0, X.shape[1])
+            s = table_to_frame(self.s).iloc[:, 0]
+            y = table_to_frame(self.y).iloc[:, 0]
+            X = table_to_frame(self.X)
 
-        cons = ({'type': 'ineq', 'fun': avg_disp_imp_lower, 'args': (s, X, t)},
-                {'type': 'ineq', 'fun': avg_disp_imp_upper, 'args': (s, X, t)})
+            z_1 = len(s[s == 1])
+            z_0 = len(s[s == 0])
+            z = len(s)
 
-        if penalty == 'l1':
-            model = minimize(fun=logistic_loss_lasso, x0=w_0, args=(X, y),
+            y_0 = y[s == 0]
+            y_1 = y[s == 1]
+
+            X_0 = X[s == 0]
+            X_1 = X[s == 1]
+
+            w_0 = np.repeat(0, X.shape[1])
+
+            t = self.Thresholds[self.t]
+
+            cons = ({'type': 'ineq', 'fun': avg_disp_imp_lower, 'args': (X_0, X_1, y_0, y_1, z_1, z_0, t)},
+                    {'type': 'ineq', 'fun': avg_disp_imp_upper, 'args': (X_0, X_1, y_0, y_1, z_1, z_0, t)})
+
+            model = minimize(fun=hinge_loss, x0=w_0, args=(X, y),
                              method='SLSQP', constraints=cons)
-        elif self.penalty == 'l2':
-            model = minimize(fun=logistic_loss_ridge, x0=w_0, args=(X, y),
-                             method='SLSQP', constraints=cons)
-        else:
-            model = minimize(fun=logistic_loss, x0=w_0, args=(X, y),
-                             method='SLSQP', constraints=cons)
 
-        return model.x
+            self.Outputs.coefficients.send(model.x)
+            self.Outputs.algorithm.send('SVM')
