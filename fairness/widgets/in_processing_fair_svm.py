@@ -67,7 +67,7 @@ class FairSVM(OWWidget):
             yz = y * np.dot(X, w)
             yz = np.maximum(np.zeros_like(yz), (1 - yz))  # hinge function
 
-            return sum(yz)
+            return np.mean(yz)
 
         def avg_disp_imp_upper(w, X_0, X_1, y_0, y_1, z_1, z_0, t):
             y_intensity = t + z_1 / z * hinge_loss(w, X_1, y_1) - z_0 / z * hinge_loss(w, X_0, y_0)

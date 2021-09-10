@@ -87,11 +87,10 @@ class PredictEvaluate(OWWidget):
         return 1 / (1 + np.exp(-np.sum(w * X, axis=1)))
 
     def predict(self, target):
-        test_data = table_to_frame(self.test_data)
-        y_test = test_data[target].astype('int')
-        X_test = test_data.drop(target, axis=1)
-
         if self.test_data is not None and self.algorithm is not None and self.coefficients is not None:
+            test_data = table_to_frame(self.test_data)
+            y_test = test_data[target].astype('int')
+            X_test = test_data.drop(target, axis=1)
             if self.algorithm == 'LogisticRegression' or  self.algorithm == 'Reweighting':
                 predictions_proba = self.sigmoid(self.coefficients, X_test)
                 predictions = [1 if predictions_proba[i]>=0.5 else 0 for i in range(len(predictions_proba))]
